@@ -13,7 +13,6 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +31,15 @@ jobs:
 
       - name: Find latest report files
         id: pick
+        shell: bash
         run: |
-          LATEST_TXT=$(ls -1t reports/*-summary.txt | head -n1)
-          LATEST_CSV=$(ls -1t reports/*-report.csv  | head -n1)
-          echo "txt=$LATEST_TXT" >> $GITHUB_OUTPUT
-          echo "csv=$LATEST_CSV" >> $GITHUB_OUTPUT
-          echo "Picked TXT: $LATEST_TXT"
-          echo "Picked CSV: $LATEST_CSV"
+          set -e
+          TXT=$(ls -1t reports/*-summary.txt 2>/dev/null | head -n1 || true)
+          CSV=$(ls -1t reports/*-report.csv   2>/dev/null | head -n1 || true)
+          echo "txt=$TXT" >> $GITHUB_OUTPUT
+          echo "csv=$CSV" >> $GITHUB_OUTPUT
+          echo "Picked TXT: $TXT"
+          echo "Picked CSV: $CSV"
 
       - name: Send TXT to Telegram
         if: steps.pick.outputs.txt != ''
@@ -54,7 +55,7 @@ jobs:
                  -F document=@\"${{ steps.pick.outputs.csv }}\" \
                  "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
 
-      # --- (Opsional) tampilkan di Chrome via GitHub Pages ---
+      # ---- Opsional: tampilkan di Chrome via GitHub Pages ----
       - name: Build simple site
         run: |
           rm -rf site && mkdir -p site
@@ -73,8 +74,7 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
 
-      # --- (Opsional) simpan arsip di Actions Artifacts ---
-      - name: Upload raw reports as artifact
+      - name: Upload raw reports as artifact (backup)
         if: always()
         uses: actions/upload-artifact@v4
         with:
