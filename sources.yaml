@@ -1,4 +1,61 @@
-rss:
-  - https://www.coindesk.com/arc/outboundfeeds/rss/
-  - https://messari.io/rss
-  - https://www.theblock.co/rss
+name: Narasi Agent (Telegram + Pages)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run narasi-agent (generate & send to Telegram)
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
+
+      # (Opsional) Upload reports agar bisa diunduh dari Actions
+      - name: Upload reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: narasi-reports
+          path: reports/
+
+      # (Opsional) Build simple site dari folder reports/ untuk GitHub Pages
+      - name: Build simple site
+        run: |
+          rm -rf site && mkdir -p site
+          cp -v reports/* site/ || true
+          echo "<!doctype html><meta charset='utf-8'><title>Narrative Reports</title><h1>Narrative Reports</h1><ul>" > site/index.html
+          for f in $(ls -1 site | sort -r); do
+            echo "<li><a href='./$f'>$f</a></li>" >> site/index.html
+          done
+          echo "</ul><p>Generated on $(date -u)</p>" >> site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
