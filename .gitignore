@@ -1,0 +1,11 @@
+# environments
+.venv/
+.env
+
+# outputs
+reports/
+logs/
+
+# python
+__pycache__/
+*.pyc
