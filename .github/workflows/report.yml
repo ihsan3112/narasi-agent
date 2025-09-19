@@ -55,7 +55,6 @@ jobs:
                  -F document=@\"${{ steps.pick.outputs.csv }}\" \
                  "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
 
-      # ---- Opsional: tampilkan di Chrome via GitHub Pages ----
       - name: Build simple site
         run: |
           rm -rf site && mkdir -p site
