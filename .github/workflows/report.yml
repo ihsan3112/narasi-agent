@@ -1,0 +1,20 @@
+name: Narasi Report
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Kirim laporan ke Telegram
+        run: |
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
+          -d chat_id=${{ secrets.CHAT_ID }} \
+          -d text="Update terbaru dari narasi-agent 🚀"
