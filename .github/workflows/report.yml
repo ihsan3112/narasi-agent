@@ -1,81 +1,52 @@
 name: Narasi Agent (Telegram + Pages)
 
 on:
-  schedule:
-    - cron: "0 0 * * *"   # 07:00 WIB
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 jobs:
-  run:
+  send-report:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run agent (generate reports)
+      - name: Run narasi-agent
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
 
-      - name: Find latest report files
-        id: pick
-        shell: bash
-        run: |
-          set -e
-          TXT=$(ls -1t reports/*-summary.txt 2>/dev/null | head -n1 || true)
-          CSV=$(ls -1t reports/*-report.csv   2>/dev/null | head -n1 || true)
-          echo "txt=$TXT" >> $GITHUB_OUTPUT
-          echo "csv=$CSV" >> $GITHUB_OUTPUT
-          echo "Picked TXT: $TXT"
-          echo "Picked CSV: $CSV"
+      - name: List files after run
+        run: ls -lh reports/
 
-      - name: Send TXT to Telegram
-        if: steps.pick.outputs.txt != ''
-        run: |
-          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
-                 -F document=@\"${{ steps.pick.outputs.txt }}\" \
-                 "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
-
-      - name: Send CSV to Telegram
-        if: steps.pick.outputs.csv != ''
-        run: |
-          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
-                 -F document=@\"${{ steps.pick.outputs.csv }}\" \
-                 "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
-
-      - name: Build simple site
-        run: |
-          rm -rf site && mkdir -p site
-          cp -v reports/* site/ || true
-          echo "<!doctype html><meta charset='utf-8'><title>Narrative Reports</title><h1>Narrative Reports</h1><ul>" > site/index.html
-          for f in $(ls -1 site | sort -r); do
-            echo "<li><a href='./$f'>$f</a></li>" >> site/index.html
-          done
-          echo "</ul><p>Generated on $(date -u)</p>" >> site/index.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
-
-      - name: Upload raw reports as artifact (backup)
-        if: always()
+      - name: Upload reports artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reports-${{ github.run_id }}
-          path: reports/*
+          name: narasi-reports
+          path: reports/
+
+      # opsional kirim file CSV/TXT ke Telegram
+      - name: Send latest TXT to Telegram
+        if: always()
+        run: |
+          TXT=$(ls -t reports/*-summary.txt | head -n1)
+          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
+               -F document=@"$TXT" \
+               "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
+
+      - name: Send latest CSV to Telegram
+        if: always()
+        run: |
+          CSV=$(ls -t reports/*-report.csv | head -n1)
+          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
+               -F document=@"$CSV" \
+               "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
