@@ -1,20 +1,82 @@
-name: Narasi Report
+name: Narasi Agent (Telegram + Pages)
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: "0 0 * * *"   # 07:00 WIB
   workflow_dispatch:
 
-jobs:
-  send-report:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
-      - name: Kirim laporan ke Telegram
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run agent (generate reports)
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
+
+      - name: Find latest report files
+        id: pick
         run: |
-          curl -s -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
-          -d chat_id=${{ secrets.CHAT_ID }} \
-          -d text="Update terbaru dari narasi-agent 🚀"
+          LATEST_TXT=$(ls -1t reports/*-summary.txt | head -n1)
+          LATEST_CSV=$(ls -1t reports/*-report.csv  | head -n1)
+          echo "txt=$LATEST_TXT" >> $GITHUB_OUTPUT
+          echo "csv=$LATEST_CSV" >> $GITHUB_OUTPUT
+          echo "Picked TXT: $LATEST_TXT"
+          echo "Picked CSV: $LATEST_CSV"
+
+      - name: Send TXT to Telegram
+        if: steps.pick.outputs.txt != ''
+        run: |
+          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
+                 -F document=@\"${{ steps.pick.outputs.txt }}\" \
+                 "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
+
+      - name: Send CSV to Telegram
+        if: steps.pick.outputs.csv != ''
+        run: |
+          curl -s -F chat_id=${{ secrets.CHAT_ID }} \
+                 -F document=@\"${{ steps.pick.outputs.csv }}\" \
+                 "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
+
+      # --- (Opsional) tampilkan di Chrome via GitHub Pages ---
+      - name: Build simple site
+        run: |
+          rm -rf site && mkdir -p site
+          cp -v reports/* site/ || true
+          echo "<!doctype html><meta charset='utf-8'><title>Narrative Reports</title><h1>Narrative Reports</h1><ul>" > site/index.html
+          for f in $(ls -1 site | sort -r); do
+            echo "<li><a href='./$f'>$f</a></li>" >> site/index.html
+          done
+          echo "</ul><p>Generated on $(date -u)</p>" >> site/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+
+      # --- (Opsional) simpan arsip di Actions Artifacts ---
+      - name: Upload raw reports as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ github.run_id }}
+          path: reports/*
